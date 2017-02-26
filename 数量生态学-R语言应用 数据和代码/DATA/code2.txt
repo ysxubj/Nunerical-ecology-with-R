@@ -1,0 +1,521 @@
+# Chapter 5: Ordination in reduced space
+# ======================================
+
+
+# Load required libraries
+library(ade4)
+library(vegan)
+library(gclus)  # Will be used to project clustering result on the
+                # ordination plot
+library(ape)
+
+# Import the data from CSV files
+spe <- read.csv("DoubsSpe.csv", row.names=1)
+env <- read.csv("DoubsEnv.csv", row.names=1)
+spa <- read.csv("DoubsSpa.csv", row.names=1)
+# Remove empty site 8
+spe <- spe[-8,]
+env <- env[-8,]
+spa <- spa[-8,]
+
+# A reminder of the content of the env dataset
+summary(env)	# Descriptive statistics
+
+
+# PCA on the full dataset (correlation matrix: scale=TRUE)
+# ********************************************************
+
+env.pca <- rda(env, scale=TRUE) # Argument scale=TRUE calls for a
+                                # standardization of the variables Scale species to unit variance
+env.pca
+summary(env.pca) # Default scaling 2
+summary(env.pca, scaling=1)
+
+
+# Examine and plot partial results from PCA output
+# ************************************************
+
+?cca.object  # Explains how an ordination object produced by vegan is
+             # structured and how to extract its results.
+
+# Eigenvalues
+(ev <- env.pca$CA$eig)
+
+# Apply Kaiser-Guttman criterion to select axes
+ev[ev > mean(ev)]
+
+# Broken stick model
+n <- length(ev)
+bsm <- data.frame(j=seq(1:n), p=0)
+bsm$p[1] <- 1/n
+for (i in 2:n) {
+	bsm$p[i] = bsm$p[i-1] + (1/(n + 1 - i))
+}
+bsm$p <- 100*bsm$p/n
+bsm
+
+# Plot eigenvalues and % of variance for each axis
+windows(title="PCA eigenvalues")
+par(mfrow=c(2,1))
+barplot(ev, main="Eigenvalues", col="bisque", las=2)
+abline(h=mean(ev), col="red")	# average eigenvalue
+legend("topright", "Average eigenvalue", lwd=1, col=2, bty="n")
+barplot(t(cbind(100*ev/sum(ev),bsm$p[n:1])), beside=TRUE, 
+	main="% variance", col=c("bisque",2), las=2)
+legend("topright", c("% eigenvalue", "Broken stick model"), 
+	pch=15, col=c("bisque",2), bty="n")
+	
+
+
+
+# Two PCA biplots: scaling 1 and scaling 2
+# ****************************************
+
+# Plots using biplot.rda
+windows(title="PCA biplots - environment - biplot.rda", 12, 6)
+par(mfrow=c(1,2))
+biplot(env.pca, scaling=1, main="PCA - scaling 1")
+biplot(env.pca, main="PCA - scaling 2")  # Default scaling = 2
+
+
+
+# Combining clustering and ordination results
+# *******************************************
+
+# Clustering the objects using the environmental data: Euclidean 
+# distance after standardizing the variables, followed by Ward clustering
+env.w <- hclust(dist(scale(env)), "ward")
+# Cut the dendrogram to yield 4 groups
+gr <- cutree(env.w, k=4)
+grl <- levels(factor(gr))
+
+# Get the site scores, scaling 1
+sit.sc1 <- scores(env.pca, display="wa", scaling=1)
+
+# Plot the sites with cluster symbols and colours (scaling 1)
+windows(title="Ordination and clustering")
+p <- plot(env.pca, display="wa", scaling=1, type="n", 
+	main="PCA correlation + clusters")
+abline(v=0, lty="dotted")
+abline(h=0, lty="dotted")
+for (i in 1:length(grl)) {
+	points(sit.sc1[gr==i,], pch=(14+i), cex=2, col=i+1)
+	}
+text(sit.sc1, row.names(env), cex=.7, pos=3)
+# Add the dendrogram
+ordicluster(p, env.w, col="dark grey")
+# Add legend interactively if desired
+legend(locator(1), paste("Group",c(1:length(grl))), pch=14+c(1:length(grl)), 
+  col=1+c(1:length(grl)), pt.cex=2)
+
+
+
+
+
+
+# CA of the raw species dataset (original species abundances)
+# ***********************************************************
+
+# Compute CA
+spe.ca <- cca(spe)
+spe.ca
+summary(spe.ca)		# default scaling 2
+summary(spe.ca, scaling=1)
+
+# Plot eigenvalues and % of variance for each axis
+(ev2 <- spe.ca$CA$eig)
+
+
+# CA biplots
+# **********
+windows(title="CA biplots", 14, 7)
+par(mfrow=c(1,2))
+# Scaling 1: sites are centroids of species
+plot(spe.ca, scaling=1, main="CA fish abundances - biplot scaling 1")
+# Scaling 2 (default): species are centroids of sites
+plot(spe.ca, main="CA fish abundances - biplot scaling 2")
+
+# A posteriori projection of environmental variables in a CA
+# The last plot produced (CA scaling 2) must be active
+spe.ca.env <- envfit(spe.ca, env)
+plot(spe.ca.env)
+# This has added the environmental variables to the last biplot drawn
+
+
+
+
+
+
+
+# PCoA on a Bray-Curtis dissimilarity matrix of fish species
+# **********************************************************
+spe.bray <- vegdist(spe)
+spe.b.pcoa <- cmdscale(spe.bray, k=(nrow(spe)-1), eig=TRUE)
+# Plot of the sites and weighted average projection of species
+windows(title="PCoA on fish species - Bray-Curtis")
+ordiplot(scores(spe.b.pcoa)[,c(1,2)], type="t", main="PCoA with species")
+abline(h=0, lty=3)
+abline(v=0, lty=3)
+# Add species
+spe.wa <- wascores(spe.b.pcoa$points[,1:2], spe)
+text(spe.wa, rownames(spe.wa), cex=0.7, col="red")
+
+
+
+
+
+
+
+# NMDS applied to the fish species - Bray-Curtis distance matrix
+# **************************************************************
+
+spe.nmds <- metaMDS(spe, distance="bray")
+spe.nmds
+spe.nmds$stress
+windows(title="NMDS on fish species - Bray")
+plot(spe.nmds, type="t", main=paste("NMDS/Bray - Stress =", 
+	round(spe.nmds$stress,3)))
+
+
+
+# Add colours from a clustering result to an NMDS plot
+# ****************************************************
+
+# Ward clustering of Bray-Curtis dissimilarity matrix
+# and extraction of four groups
+spe.bray.ward <- hclust(spe.bray, "ward")
+spe.bw.groups <- cutree(spe.bray.ward, k=4)
+grp.lev <- levels(factor(spe.bw.groups))
+
+# Combination with NMDS result
+sit.sc <- scores(spe.nmds)
+windows(title="NMDS plot with cluster colors")
+p <- ordiplot(sit.sc, type="n", main="NMDS/Bray + clusters Ward/Bray")
+for (i in 1:length(grp.lev)) {
+	points(sit.sc[spe.bw.groups==i,], pch=(14+i), cex=2, col=i+1)
+	}
+text(sit.sc, row.names(spe), pos=4, cex=0.7)
+# Add the dendrogram
+ordicluster(p, spe.bray.ward, col="dark grey")
+legend(locator(1), paste("Group",c(1:length(grp.lev))), 
+  pch=14+c(1:length(grp.lev)), col=1+c(1:length(grp.lev)), pt.cex=2)
+
+# CHAPTER 6 - CANONICAL ORDINATION
+# ********************************
+
+# Load required libraries
+library(ade4)
+library(vegan)
+library(packfor) # Available on R-Forge, 
+	             # URL= https://r-forge.r-project.org/R/?group_id=195
+	# In MacOS X, the gfortran package is required by the forward.sel function 
+	# of packfor, so users must install the gfortran compiler. Choose ÔMacOS X?
+	# in the Ôcran.r-project.org?window, then Ôtools?
+library(MASS)
+library(ellipse)
+library(FactoMineR)
+
+
+
+# Import the data from CSV files
+spe <- read.csv("DoubsSpe.csv", row.names=1)
+env <- read.csv("DoubsEnv.csv", row.names=1)
+spa <- read.csv("DoubsSpa.csv", row.names=1)
+# Remove empty site 8
+spe <- spe[-8, ]
+env <- env[-8, ]
+spa <- spa[-8, ]
+
+# Set aside the variable 'das' (distance from the source) for later use
+das <- env[, 1]
+
+# Remove the 'das' variable from the env dataset
+env <- env[, -1]
+# Recode the slope variable (pen) into a factor (qualitative) 
+# variable (to show how these are handled in the ordinations)
+pen2 <- rep("very_steep", nrow(env))
+pen2[env$pen <= quantile(env$pen)[4]] = "steep"
+pen2[env$pen <= quantile(env$pen)[3]] = "moderate"
+pen2[env$pen <= quantile(env$pen)[2]] = "low"
+pen2 <- factor(pen2, levels=c("low", "moderate", "steep", "very_steep"))
+table(pen2)
+# Create an env2 data frame with slope as a qualitative variable
+env2 <- env
+env2$pen <- pen2
+
+# Create two subsets of explanatory variables
+# Physiography (upstream-downstream gradient)
+envtopo <- env[, c(1:3)]
+names(envtopo)
+# Water quality
+envchem <- env[, c(4:10)]
+names(envchem)
+
+# Hellinger-transform the species dataset
+spe.hel <- decostand(spe, "hellinger")
+
+
+# --------------------------------------------------------------------------
+
+# REDUNDANCY ANALYSIS (RDA)
+# *************************
+
+# RDA of the Hellinger-transformed fish species data, constrained
+# by all the environmental variables contained in env2
+
+spe.rda <- rda(spe.hel~., env2) # Observe the shortcut formula
+summary(spe.rda) # Scaling 2 (default)
+
+# How to obtain canonical coefficients from an rda() object
+coef(spe.rda)
+
+
+# Retrieval of the adjusted R^2
+# *****************************
+
+# Unadjusted R^2 retrieved from the rda result
+(R2 <- RsquareAdj(spe.rda)$r.squared)
+
+# Adjusted R^2 retrieved from the rda object
+(R2adj <- RsquareAdj(spe.rda)$adj.r.squared)
+
+
+# Triplots of the rda results
+# ***************************
+# Scaling 1: distance triplot
+windows(title="RDA scaling 1 + wa")
+plot(spe.rda, scaling=1, main="Triplot RDA spe.hel ~ env2 - scaling 1 - wa scores")
+spe.sc <- scores(spe.rda, choices=1:2, scaling=1, display="sp")
+arrows(0, 0, spe.sc[, 1], spe.sc[, 2], length=0, lty=1, col="red")
+
+# Scaling 2 (default): correlation triplot
+windows(title="RDA scaling 2 + wa")
+plot(spe.rda, main="Triplot RDA spe.hel ~ env2 - scaling 2 - wa scores")
+spe2.sc <- scores(spe.rda, choices=1:2, display="sp")
+arrows(0, 0, spe2.sc[, 1], spe2.sc[, 2], length=0, lty=1, col="red")
+
+
+# Site scores as linear combinations of the environmental variables
+
+# Scaling 1
+windows(title="RDA scaling 1 + lc")
+plot(spe.rda, scaling=1, display=c("sp", "lc", "cn"), 
+	main="Triplot RDA spe.hel ~ env2 - scaling 1 - lc scores")
+arrows(0, 0, spe.sc[, 1], spe.sc[, 2], length=0, lty=1, col="red")
+
+# Scaling 2
+windows(title="RDA scaling 2 + lc")
+plot(spe.rda, display=c("sp", "lc", "cn"), 
+	main="Triplot RDA spe.hel ~ env2 - scaling 2 - lc scores")
+arrows(0, 0, spe2.sc[,1], spe2.sc[,2], length=0, lty=1, col="red")
+
+
+# Global test of the RDA result
+anova.cca(spe.rda, step=1000)
+
+# Tests of all canonical axes
+anova.cca(spe.rda, by="axis", step=1000)
+
+
+
+# Partial RDA: effect of water chemistry, holding physiography constant
+
+# Simple interface; X and W may be separate tables of quantitative variables
+spechem.physio <- rda(spe.hel, envchem, envtopo)
+spechem.physio
+
+
+# Formula interface; X and W must be in the same data frame
+class(env)
+spechem.physio2 <- rda(spe.hel ~ pH + dur + pho + nit + amm + oxy + dbo 
+ + Condition(alt + pen + deb), data=env)
+spechem.physio2
+
+
+
+
+
+
+# Variance inflation factors (VIF) in two RDAs
+# ********************************************
+vif.cca(spe.rda) # First RDA of this Chapter: all environmental variables
+vif.cca(spechem.physio) # Partial RDA
+
+
+# Forward selection of explanatory variables
+# using a double stopping criterion (Blanchet et al. 2008a)
+
+# 1. RDA with all explanatory variables
+spe.rda.all <- rda(spe.hel ~ ., data=env)
+
+# 2. Global adjusted R^2
+(R2a.all <- RsquareAdj(spe.rda.all)$adj.r.squared)
+
+# 3. Forward selection using packfors forward.sel()
+# library(packfor) # if not already loaded
+forward.sel(spe.hel, env, adjR2thresh=R2a.all)
+
+# Forward selection using vegan ordistep(). 
+# This function allows the use of factors. Options are also available 
+# for stepwise and backward selection of the explanatory variables.
+
+step.forward <- ordistep(rda(spe.hel ~ 1, data=env), scope = formula(spe.rda.all ), 
+direction="forward", pstep = 1000)
+
+RsquareAdj(rda(spe.hel ~ alt, data=env))$adj.r.squared
+RsquareAdj(rda(spe.hel ~ alt+oxy, data=env))$adj.r.squared
+RsquareAdj(rda(spe.hel ~ alt+oxy+dbo, data=env))$adj.r.squared
+RsquareAdj(rda(spe.hel ~ alt+oxy+dbo+pen, data=env))$adj.r.squared
+
+
+# Parsimonious RDA
+# ****************
+
+spe.rda.pars <- rda(spe.hel ~ alt + oxy + dbo, data=env)
+spe.rda.pars
+anova.cca(spe.rda.pars, step=1000)
+anova.cca(spe.rda.pars, step=1000, by="axis")
+vif.cca(spe.rda.pars)
+(R2a.pars <- RsquareAdj(spe.rda.pars)$adj.r.squared)
+
+
+# Triplots of the parsimonious RDA (with fitted site scores)
+# **********************************************************
+
+# Scaling 1
+windows(title="Parsimonious RDA scaling 1")
+plot(spe.rda.pars, scaling=1, display=c("sp", "lc", "cn"), 
+	main="Triplot RDA spe.hel ~ alt+oxy+dbo - scaling 1 - lc scores")
+spe4.sc = scores(spe.rda.pars, choices=1:2, scaling=1, display="sp")
+arrows(0, 0, spe4.sc[, 1], spe4.sc[, 2], length=0, lty=1, col="red")
+
+# Scaling 2
+windows(title="Parsimonious RDA scaling 2")
+plot(spe.rda.pars, display=c("sp", "lc", "cn"), 
+	main="Triplot RDA spe.hel ~ alt+oxy+dbo - scaling 2 - lc scores")
+spe5.sc = scores(spe.rda.pars, choices=1:2, display="sp")
+arrows(0, 0, spe5.sc[,1], spe5.sc[,2], length=0, lty=1, col="red")
+
+
+# Variation partitioning with two sets of explanatory variables
+# *************************************************************
+
+# Explanation of fraction labels
+windows(title="Symbols of variation partitioning fractions",12,4)
+par(mfrow=c(1,3))
+showvarparts(2) # Two explanatory matrices
+showvarparts(3) # Three explanatory matrices
+showvarparts(4) # Four explanatory matrices
+
+# 1. Variation partitioning with all explanatory variables
+
+spe.part.all <- varpart(spe.hel, envchem, envtopo)
+spe.part.all
+windows(title="Variation partitioning - all variables")
+plot(spe.part.all, digits=2)  # Plot of the partitioning results
+
+
+
+
+
+
+# CANONICAL CORRESPONDENCE ANALYSIS (CCA)
+# ***************************************
+
+# CCA of the raw fish species data, constrained by all the 
+# environmental variables in env2
+spe.cca <- cca(spe ~ ., env2)
+spe.cca
+summary(spe.cca) # Scaling 2 (default)
+
+
+# CCA triplots (using lc site scores)
+# ***********************************
+
+# Scaling 1: species scores scaled to relative eigenvalues, 
+# sites are weighted averages of the species
+windows(title="CCA triplot - scaling 1 - lc scores", 9, 9)
+plot(spe.cca, scaling=1, display=c("sp","lc","cn"), main="Triplot CCA spe ~ env2 - scaling 1")
+
+# Default scaling 2: site scores scaled to relative eigenvalues, 
+# species are weighted averages of the sites
+windows(title="CCA triplot - scaling 2 - lc scores", 9, 9)
+plot(spe.cca, display=c("sp","lc","cn"), main="Triplot CCA spe ~ env2 - scaling 2")
+
+
+# CCA scaling 1 biplot without species (using lc site scores)
+# ***********************************************************
+windows(title="CCA biplot - scaling 1", 9, 9)
+plot(spe.cca, scaling=1, display=c("lc", "cn"), 
+ main="Biplot CCA spe ~ env2 - scaling 1")
+ 
+# CCA scaling 2 biplot without sites
+# **********************************
+windows(title="CCA biplot - scaling 2", 9, 9)
+plot(spe.cca, scaling=2, display=c("sp", "cn"), 
+ main="Biplot CCA spe ~ env2 - scaling 2")
+
+
+# Permutation tests of CCA results
+# ********************************
+
+# Permutation test of the overall analysis
+anova(spe.cca, step=1000)
+
+# Permutation test of each axis
+anova(spe.cca, by="axis", step=1000)
+
+
+# CCA-based forward selection using veganÕs ordistep()
+# ****************************************************
+# This function allows the use of factors like 'pen' in env2
+
+cca.step.forward <- ordistep(cca(spe ~ 1, data=env2), scope=formula(spe.cca), 
+direction="forward", pstep=1000)
+
+
+# Parsimonious CCA using alt, oxy and dbo
+# ***************************************
+
+(spe.cca.pars <- cca(spe ~ alt + oxy + dbo, data=env2))
+anova.cca(spe.cca.pars, step=1000)
+anova.cca(spe.cca.pars, step=1000, by="axis")
+
+vif.cca(spe.cca)
+vif.cca(spe.cca.pars)
+
+
+# Three-dimensional interactive ordination plots
+# **********************************************
+
+# Plot of the sites only (wa scores)
+# **********************************
+ordirgl(spe.cca.pars, type="t", scaling=1)
+
+# Connect weighted average scores to linear combination scores
+orglspider(spe.cca.pars, scaling=1, col="purple")
+
+# Plot the sites (wa scores) with a clustering result
+# ***************************************************
+# Colour sites according to cluster membership
+gr <- cutree(hclust(vegdist(spe.hel, "euc"), "ward"), 4)
+ordirgl(spe.cca.pars, type="t", scaling=1, ax.col="black", col=gr+1)
+# Connect sites to cluster centroids
+orglspider(spe.cca.pars, gr, scaling=1)
+
+# Complete CCA 3D triplot
+# ***********************
+ordirgl(spe.cca.pars, type="t", scaling=2)
+orgltext(spe.cca.pars, display="species", type="t", scaling=2, col="cyan")
+
+# Plot species groups (Jaccard similarity, useable in R mode)
+# ***********************************************************
+gs <- cutree(hclust(vegdist(t(spe), method="jaccard"), "ward"), 4)
+ordirgl(spe.cca.pars, display="species", type="t", col=gs+1)
+
+rgl.quit()  # shutdown rgl device system
+
+# --------------------------------------------------------------------------
+
+
+

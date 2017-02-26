@@ -1,0 +1,29 @@
+# ============================================================
+# Script for first-time users of "Numerical Ecology with R"  #
+# by Daniel Borcard, Francois Gillet and Pierre Legendre     #
+# ============================================================
+
+# This script installs or provides guidelines to install all 
+# the packages necessary to run the code provided in the book, 
+# but that do not belong to the standard R distribution (steps 1-3). 
+# Additionally, it sources some additional functions (step 4).
+
+# Steps 1 to 3 must be run only once when installing or upgrading R.
+# Step 4 is not mandatory, the necessary functions being sourced 
+# when necessary.
+
+
+# 1. Packages from the main CRAN site
+#    --------------------------------
+
+install.packages(c("ade4", "ape", "cluster", "ellipse", "FactoMineR", "FD",
+	"gclus", "labdsv", "MASS", "mvpart", "RColorBrewer", "rgl","spdep", "tripack", "vegan"))
+
+
+# 2. Packages from R-Forge.R-project
+#    -------------------------------
+
+install.packages("spacemakeR", repos="http://R-Forge.R-project.org")
+install.packages("packfor", repos="http://R-Forge.R-project.org")
+install.packages("PCNM", repos="http://R-Forge.R-project.org", type="source")
+install.packages("AEM", repos="http://R-Forge.R-project.org")
